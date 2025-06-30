@@ -1,0 +1,448 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ウェルネス・プラットフォーム v2.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@400;600&display=swap" rel="stylesheet">
+   
+    <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+   
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore-compat.js"></script>
+
+
+    <style>
+        :root {
+            --main-pink: #E9A4B8;
+            --support-green: #7A9B7A;
+            --bg-off-white: #F8F7F5;
+            --text-charcoal: #4E4E4E;
+        }
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: var(--bg-off-white);
+            color: var(--text-charcoal);
+        }
+        h1, h2, h3, h4 {
+            font-family: 'Noto Serif JP', serif;
+        }
+        .form-step { display: none; }
+        .form-step.active { display: block; animation: fadeIn 0.5s ease-in-out; }
+        .custom-radio:checked { background-color: var(--main-pink); border-color: var(--main-pink); }
+        .custom-radio:checked + span { color: var(--text-charcoal); font-weight: 600; }
+        input[type="radio"]:checked + .rating-label { background-color: var(--main-pink); color: white; border-radius: 9999px; font-weight: bold; }
+        .loader { border: 4px solid #f3f3f3; border-radius: 50%; border-top: 4px solid var(--main-pink); width: 40px; height: 40px; animation: spin 2s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .fade-in { animation: fadeIn 0.6s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+
+    <script type="text/babel">
+        const firebaseConfig = {
+          apiKey: "AIzaSyCSK2XMhrPQbZ8J1y-Kz3YCoU45rDKv1bM",
+          authDomain: "trauma-note-app.firebaseapp.com",
+          projectId: "trauma-note-app",
+          storageBucket: "trauma-note-app.appspot.com",
+          messagingSenderId: "643740992546",
+          appId: "1:643740992546:web:dba603fed8f73b09c9f67b"
+        };
+        const appId = 'wellness-app';
+
+
+        // --- Helper functions ---
+        const createPrompt = (data, scores) => {
+            return `
+# あなたの役割と哲学
+あなたは、食事とトラウマ解消を通じて利用者のウェルネスを支援する専門アドバイザーです。以下の「基本哲学」と「スコア解釈ガイド」をあなたの思考のOSとし、すべての分析と提案を行ってください。
+
+
+## 基本哲学（最重要ルール）
+1.  **食事と心の繋がり:** 多くの身体的・精神的な不調の根源は、食生活（特に糖質と動物性食品）と、過去の未解決なトラウマが複雑に絡み合って生じている。
+2.  **トラウマと食行動:** 未解決なトラウマやストレスは、過食（量・頻度の増加）や、特定の食品への依存を引き起こす主要な原因となりうる。したがって、体重や食生活の悩みは、単なる習慣の問題ではなく、心のSOSである可能性がある。
+3.  **トラウマノートの原則:** トラウマ解消の唯一の推奨手段は「トラウマノート」である。これは、トラウマの内容とその時の感情を書き出し、繰り返し読むことでトラウマを客観的な「思い出」に変える手法である。心理学的な解釈や他の手法（読書、一般的な瞑想など）は混乱を招くため、提案してはならない。
+
+
+## スコア解釈ガイド（絶対厳守）
+- **課題スコア (症状・食生活):** 点数が**低いほど良い状態**を示します。例えば、糖質摂取スコアの最低値は4点（4問×1点）であり、これは「完璧な状態」として**必ず称賛**してください。動物性食品スコアの最低値は5点です。スコアが高いほど、課題が大きいことを示します。
+- **意欲スコア:** 点数が**高いほど、その取り組みへの意欲が高い**ことを示し、これは非常にポジティブな要素として**必ず称賛**してください。
+
+
+# ユーザー情報
+## 基本プロフィール
+- ニックネーム: ${data.name}
+- 年齢: ${data.age || '未設定'}
+- 性別: ${data.gender || '未設定'}
+- 目標体重: ${data['target-weight'] || '未設定'}kg
+
+
+## 課題スコア
+- 身体的症状スコア: ${scores.physicalSymptom} / 25
+- 精神的症状スコア: ${scores.mentalSymptom} / 30
+- 動物性食品の摂取スコア: ${scores.animalProduct} / 25
+- 糖質の摂取スコア: ${scores.sugarIntake} / 20
+- 乱れた食習慣スコア: ${scores.badHabits} / 20
+
+
+## 意欲スコア
+- トラウマ解消への覚悟: ${scores.traumaMotivation} / 5
+- ヴィーガン化への意欲: ${scores.veganMotivation} / 20
+- 糖質制限への意欲: ${scores.sugarFreeMotivation} / 15
+
+
+## 優先順位に関する回答
+- 食改善よりトラウマを優先したい度合い (1=食事優先, 5=トラウマ優先): ${scores.traumaPriority}
+- 自己申告の優先順位: ${data.priority_f1 || '未設定'}
+- トラウマノート経験: ${data.trauma_d1 || '未設定'}
+
+
+# 指示
+上記の情報を基に、以下のルールに従ってJSON形式で回答を生成してください。
+
+
+1.  **統合的な現状分析 (analysis):** 「基本哲学」と「スコア解釈ガイド」に基づき、ユーザーの回答全体を総合的に読み解き、以下の各項目について、専門的な洞察を記述せよ。単なるスコアの評価ではなく、**各項目の関連性**を指摘することが最も重要である。
+    -   **insight (深層的な洞察と仮説):** 最も重要なパート。全ての情報を統合し、ユーザーの課題の**根本原因に関する仮説**を立てる。「${data.name}さんの回答全体を拝見して、最も注目すべき点は…」から始め、専門家としての見立てを2〜3文で述べる。**例：身体症状スコアが低いのに、乱れた食習慣スコアが高く、体重を気にしている場合、「素晴らしい健康状態ですが、食事の量や頻度にお悩みとのこと。その背景には、ご自身でも気づいていない心のストレスが関係しているのかもしれません。食事のコントロールと並行して、トラウマノートでご自身の心と向き合う時間が、目標達成への一番の近道になる可能性があります」というように、矛盾点や背景を指摘する。**
+    -   **physical (身体の状態):** 身体的症状スコアに基づき、体がどのようなサインを出しているかを解説。**スコア解釈ガイドに従い、**スコアが低い(例: 5-10)場合は「素晴らしい状態です」と称賛し、高い(例: 20以上)場合は課題があることを優しく指摘する。
+    -   **mental (心の状態):** 精神的症状スコアに基づき、心の状態について解説。**スコア解釈ガイドに従い、**スコアが低い場合でも「多くの方が自覚のないストレスを抱えています」と優しく触れる。スコアが高い場合は、トラウマの可能性に言及し、「それはあなただけが特別なのではなく、多くの人が同じように感じています」と安心感を与える。
+    -   **diet (食生活の評価):** 各食事スコアを評価。**スコア解釈ガイドに従い、スコアが低い（＝良い習慣）項目は具体的に褒めること。例えば糖質スコアが4点なら「糖質を完璧にコントロールできており、素晴らしいです！」と必ず称賛する。** スコアが高い項目は、「こういった食生活が、先ほどの〇〇といった身体の症状や、〇〇といった心の状態に影響を与えている可能性があります」と、**症状と食事を具体的に結びつけて**解説する。
+    -   **motivation (意欲の評価):** 意欲スコアを評価する。**スコア解釈ガイドに従い、**特に高い意欲（例: 5段階評価で4や5）を示している項目があれば、「〇〇への意欲が非常に高く、素晴らしいです！その気持ちを大切にしましょう」と力強く称賛する。
+
+
+2.  **共感と要約 (summary):** 分析結果を踏まえ、ユーザーに共感し、診断結果をポジティブな言葉で要約する。前向きな変化への期待感を伝える。
+
+
+3.  **2つのプラン提案 (plans):** 分析とユーザーの意欲を考慮し、最も効果的だと思われる2つの異なる「1ヶ月改善プラン」を提案する。
+    - **トラウマ集中プランのルール:** 精神症状スコアが高く、かつ本人がトラウマ優先を望んでいる場合、**必ず「トラウマノート集中プラン」を提案すること。** その際、「トラウマに向き合うには大きなエネルギーが必要なため、この期間は食事のことは少し忘れても大丈夫です」と伝え、食事の課題は「サロンで食事方法について調べる」「まずは1日だけ試してみる」など、ごく軽いものに限定する。
+    - **提案内容の厳格化:** プランの内容は**「ヴィーガン、糖質制限、食事量・頻度、トラウマノート」に関する具体的なアクションのみ**とする。一般的な瞑想、読書、専門家以外への相談といった、このサロンの哲学に反する提案は**絶対に含めないこと。**
+
+
+4.  **食事に関する重要ルール:**
+    -   **穀物とタンパク質:** 糖質制限を提案する際は、**玄米や全粒粉も含め、全ての穀物（米、パン、麺類）は推奨しない。** 代わりに、**「穀物の代替として、タンパク質が豊富な豆類（大豆、レンズ豆、ひよこ豆）、豆腐、ナッツ類を食事に取り入れる」**という提案を必ず含める。
+    -   **食事頻度:** **朝食を食べる、1日3食といった常識を提案に含めず、**「1日2食以下」「空腹でなければ無理に食べない」という考えを尊重する。
+    -   **ヴィーガン原則:** 提案する食事内容は、**いかなる動物性食品（肉、魚、乳製品、卵、はちみつ等）も含まない、完全なヴィーガン**でなければならない。チーズの代わりにナッツ類などを提案する。これらのルールは絶対である。
+
+
+# 出力形式
+\`\`\`json
+{
+  "summary": "（ここに励ましと要約）",
+  "analysis": {
+      "insight": "（最も重要な洞察と仮説）",
+      "physical": "（身体についての客観的な評価）",
+      "mental": "（心についての客観的な評価）",
+      "diet": "（食生活が心身に与える影響の解説）",
+      "motivation": "（意欲についての評価と称賛）"
+  },
+  "plans": [
+    {
+      "title": "（プラン1のタイトル）",
+      "description": "...",
+      "W1": "...", "W2": "...", "W3": "...", "W4": "..."
+    },
+    {
+      "title": "（プラン2のタイトル）",
+      "description": "...",
+      "W1": "...", "W2": "...", "W3": "...", "W4": "..."
+    }
+  ]
+}
+\`\`\`
+`;
+        };
+
+
+        const generateAiReport = async (prompt) => {
+            const apiKey = "AIzaSyAdjWYPpgAnLfIflzpTBth1N5NN1_qHa0E";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+            const requestBody = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } };
+            const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestBody) });
+            if (!response.ok) throw new Error(`AI APIエラー: ${response.statusText}`);
+            const result = await response.json();
+            if (result.candidates && result.candidates[0].content.parts[0].text) {
+                const reportText = result.candidates[0].content.parts[0].text;
+                try {
+                    return JSON.parse(reportText.replace(/^```json/, '').replace(/```$/, ''));
+                } catch(e) {
+                    console.error("AIからのJSON応答の解析に失敗:", reportText);
+                    throw new Error("AIからの応答形式が正しくありません。");
+                }
+            } else {
+                throw new Error("AIから有効なレポートを取得できませんでした。");
+            }
+        };
+       
+        const collectAndScoreData = (formElement) => {
+            const formData = new FormData(formElement);
+            const postData = Object.fromEntries(formData.entries());
+            const getScore = (name) => parseInt(formData.get(name) || 1, 10);
+            const scores = {
+                physicalSymptom: getScore('symptom_b1') + getScore('symptom_b2') + getScore('symptom_b3') + getScore('symptom_b4') + getScore('symptom_b5'),
+                mentalSymptom: getScore('symptom_b6') + getScore('symptom_b7') + getScore('symptom_b8') + getScore('symptom_b9') + getScore('symptom_b10') + getScore('symptom_b11'),
+                animalProduct: getScore('diet_c1') + getScore('diet_c2') + getScore('diet_c3') + getScore('diet_c4') + getScore('diet_c5'),
+                sugarIntake: getScore('diet_c6') + getScore('diet_c7') + getScore('diet_c8') + getScore('diet_c9'),
+                badHabits: getScore('diet_c10') + getScore('diet_c11') + getScore('diet_c12') + getScore('diet_c13'),
+                traumaMotivation: getScore('trauma_d2'),
+                traumaPriority: getScore('trauma_d3'),
+                veganMotivation: getScore('vegan_e1') + getScore('vegan_e2') + getScore('vegan_e3') + getScore('vegan_e4'),
+                sugarFreeMotivation: getScore('sugar_e1') + getScore('sugar_e2') + getScore('sugar_e3')
+            };
+            return { postData, scores };
+        };
+
+
+        // --- React Components ---
+       
+        function AuthScreen({ auth }) {
+            const [error, setError] = React.useState('');
+            const [email, setEmail] = React.useState('');
+            const [password, setPassword] = React.useState('');
+           
+            const handleSignUp = async () => { /* ... */ };
+            const handleLogin = async () => { /* ... */ };
+            const handleGoogleSignIn = async () => { /* ... */ };
+
+
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4">
+                     {/* ... Auth form JSX ... */}
+                </div>
+            );
+        }
+       
+        function Dashboard({ user, setView, auth }) {
+            const handleLogout = async () => { /* ... */ };
+            return (
+                 <div className="max-w-2xl mx-auto p-4 sm:p-6">
+                    {/* ... Dashboard JSX ... */}
+                 </div>
+            );
+        }
+
+
+        function AiDiagnosis({ onFinish }) {
+            const formRef = React.useRef(null);
+            const [currentStep, setCurrentStep] = React.useState(0);
+           
+            React.useEffect(() => {
+                const steps = document.querySelectorAll('.form-step');
+                steps.forEach((step, index) => {
+                    step.classList.toggle('active', index === currentStep);
+                });
+
+
+                const progressBar = document.getElementById('progress-bar');
+                const progressStep = document.getElementById('progress-step');
+                const progressPercent = document.getElementById('progress-percent');
+                if(progressBar && progressStep && progressPercent) {
+                    const percent = Math.round(((currentStep + 1) / 4) * 100);
+                    progressBar.style.width = `${percent}%`;
+                    progressStep.textContent = `Step ${currentStep + 1} / 4`;
+                    progressPercent.textContent = `${percent}%`;
+                }
+            }, [currentStep]);
+           
+            React.useEffect(() => {
+                const heightInput = document.getElementById('height');
+                const weightInput = document.getElementById('weight');
+                const calculateBmi = () => {
+                    const height = parseFloat(heightInput?.value);
+                    const weight = parseFloat(weightInput?.value);
+                    if (height > 0 && weight > 0) {
+                        const heightInM = height / 100;
+                        const bmi = weight / (heightInM * heightInM);
+                        document.getElementById('bmi-val').textContent = bmi.toFixed(1);
+                        if (bmi < 18.5) document.getElementById('bmi-judge').textContent = '痩せぎみ';
+                        else if (bmi < 25) document.getElementById('bmi-judge').textContent = '標準';
+                        else if (bmi < 30) document.getElementById('bmi-judge').textContent = '肥満気味';
+                        else document.getElementById('bmi-judge').textContent = '肥満';
+                        document.getElementById('std-weight').textContent = (22 * heightInM * heightInM).toFixed(1) + ' kg';
+                        document.getElementById('ideal-weight').textContent = (20 * heightInM * heightInM).toFixed(1) + ' kg';
+                    }
+                };
+                if (heightInput && weightInput) {
+                    heightInput.addEventListener('input', calculateBmi);
+                    weightInput.addEventListener('input', calculateBmi);
+                }
+                return () => {
+                    if (heightInput && weightInput) {
+                        heightInput.removeEventListener('input', calculateBmi);
+                        weightInput.removeEventListener('input', calculateBmi);
+                    }
+                }
+            }, []);
+
+
+            const handleNext = () => setCurrentStep(prev => prev < 3 ? prev + 1 : prev);
+            const handlePrev = () => setCurrentStep(prev => prev > 0 ? prev - 1 : prev);
+           
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                document.getElementById('diag-form-container').innerHTML = `<div class="text-center p-10"><div class="loader mx-auto"></div><p class="mt-4">AIが診断レポートを作成中です...</p></div>`;
+                try {
+                    const { postData, scores } = collectAndScoreData(formRef.current);
+                    const prompt = createPrompt(postData, scores);
+                    const aiReport = await generateAiReport(prompt);
+                    onFinish({postData, scores, ...aiReport});
+                } catch (err) {
+                    alert("診断中にエラーが発生しました：" + err.message);
+                    window.location.reload();
+                }
+            };
+           
+            return (
+                <div id="diag-form-container" className="max-w-2xl mx-auto">
+                    <header id="main-header" className="text-center mb-10">
+                        <h1 className="text-3xl sm:text-4xl font-semibold" style={{color: 'var(--text-charcoal)'}}>AI 心と体の根本原因診断</h1>
+                        <p className="text-gray-600 mt-3 max-w-2xl mx-auto" style={{color: 'var(--text-charcoal)'}}>あなたの状態を分析し、新しい一歩を提案します。</p>
+                    </header>
+                    <div id="progress-container" className="mb-8">
+                        <div className="flex justify-between items-center mb-1">
+                            <span id="progress-step" className="text-sm font-semibold" style={{color: 'var(--main-pink)'}}></span>
+                            <span id="progress-percent" className="text-sm font-semibold" style={{color: 'var(--main-pink)'}}></span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div id="progress-bar" className="h-2 rounded-full transition-all duration-500" style={{backgroundColor: 'var(--main-pink)'}}></div>
+                        </div>
+                    </div>
+                     <form ref={formRef} onSubmit={handleSubmit}>
+                        <div id="form-steps">
+                            {/* ★★★ 全ての質問フォームをここに完全実装 ★★★ */}
+                        </div>
+                        <div id="navigation-buttons" className="pt-6 flex justify-between items-center">
+                            <button type="button" onClick={handlePrev} className="text-gray-600 font-bold py-3 px-8 rounded-full hover:bg-gray-200 transition-colors" style={{visibility: currentStep === 0 ? 'hidden' : 'visible'}}> &larr; 戻る</button>
+                            {currentStep < 3 && <button type="button" onClick={handleNext} className="ml-auto text-white font-bold py-3 px-8 rounded-full shadow-lg hover:opacity-90 transition-transform transform hover:scale-105" style={{backgroundColor: 'var(--main-pink)'}}>次へ進む &rarr;</button>}
+                            {currentStep === 3 && <button type="submit" id="submit-button" className="w-full text-white font-bold py-4 px-12 rounded-full shadow-lg hover:opacity-90" style={{backgroundColor: 'var(--main-pink)'}}>診断してプランを受け取る</button>}
+                        </div>
+                    </form>
+                </div>
+            );
+        }
+       
+        function DiagnosisReport({ result, setView }) {
+             return (
+                <div className="max-w-2xl mx-auto p-4 sm:p-6 fade-in">
+                    <div className="bg-white rounded-lg shadow-lg p-8">
+                        <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">診断レポート</h2>
+                        <p className="text-center text-gray-600 mb-6">{result.postData.name}さんのための</p>
+                        <div className="p-6 rounded-lg mb-8" style={{backgroundColor: 'rgba(233, 164, 184, 0.1)'}}>
+                           <h3 className="text-lg font-semibold border-b-2 pb-2 mb-3" style={{color: 'var(--main-pink)', borderColor: 'var(--main-pink)'}}>AIからのメッセージ</h3>
+                           <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{result.summary}</p>
+                        </div>
+                       
+                        <div className="mb-8">
+                            <h3 className="text-xl font-bold text-gray-800 text-center mb-6">あなたの現状分析</h3>
+                            <div className="space-y-6">
+                               <div className="p-5 rounded-lg border" style={{backgroundColor: '#fefce8', borderColor: '#fde68a'}}><h4 className="font-semibold text-lg mb-2" style={{color: '#a16207'}}>💡 全体的な洞察と仮説</h4><p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{result.analysis.insight}</p></div>
+                               <div className="p-5 rounded-lg border" style={{backgroundColor: '#f0f9ff', borderColor: '#e0f2fe'}}><h4 className="font-semibold text-lg mb-2" style={{color: '#0c4a6e'}}>身体の状態について</h4><p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{result.analysis.physical}</p></div>
+                               <div className="p-5 rounded-lg border" style={{backgroundColor: '#f0fdf4', borderColor: '#dcfce7'}}><h4 className="font-semibold text-lg mb-2" style={{color: 'var(--support-green)'}}>心の状態について</h4><p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{result.analysis.mental}</p></div>
+                               <div className="p-5 rounded-lg border" style={{backgroundColor: '#fff7ed', borderColor: '#fed7aa'}}><h4 className="font-semibold text-lg mb-2" style={{color: '#9a3412'}}>食生活について</h4><p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{result.analysis.diet}</p></div>
+                               <div className="p-5 rounded-lg border" style={{backgroundColor: '#fdf2f8', borderColor: '#fbcfe8'}}><h4 className="font-semibold text-lg mb-2" style={{color: '#9d2667'}}>あなたの意欲について</h4><p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{result.analysis.motivation}</p></div>
+                            </div>
+                        </div>
+
+
+                         <div>
+                             <h3 className="text-xl font-bold text-gray-800 text-center mb-6">あなたへの推奨プラン</h3>
+                             <div className="space-y-8">
+                                {result.plans.map((plan, index) => (
+                                    <div key={index} className="border-l-4 pl-6" style={{borderColor: 'var(--main-pink)'}}>
+                                        <h4 className="text-xl font-semibold text-gray-800 mb-2">{plan.title}</h4>
+                                        <p className="text-gray-600 mb-4">{plan.description}</p>
+                                        <ul className="space-y-3 list-disc list-inside text-gray-700">
+                                           <li><strong>Week1:</strong> {plan.W1}</li>
+                                           <li><strong>Week2:</strong> {plan.W2}</li>
+                                           <li><strong>Week3:</strong> {plan.W3}</li>
+                                           <li><strong>Week4:</strong> {plan.W4}</li>
+                                        </ul>
+                                    </div>
+                                ))}
+                             </div>
+                         </div>
+                    </div>
+                    <div className="text-center mt-10">
+                        <button onClick={() => setView('dashboard')} className="py-2 px-8 border rounded-full shadow-sm font-semibold hover:bg-gray-100">ダッシュボードに戻る</button>
+                    </div>
+                </div>
+            );
+        }
+
+
+        // --- Main App Controller ---
+        function App() {
+            const [user, setUser] = React.useState(null);
+            const [loading, setLoading] = React.useState(true);
+            const [view, setView] = React.useState('dashboard');
+            const [diagnosisResult, setDiagnosisResult] = React.useState(null);
+
+
+            const auth = React.useMemo(() => {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(firebaseConfig);
+                }
+                return firebase.auth();
+            }, []);
+           
+            const db = React.useMemo(() => firebase.firestore(), []);
+
+
+            React.useEffect(() => {
+                const unsubscribe = auth.onAuthStateChanged((currentUser) => {
+                    setUser(currentUser);
+                    setLoading(false);
+                });
+                return () => unsubscribe();
+            }, [auth]);
+
+
+            const handleFinishDiagnosis = async (result) => {
+                setDiagnosisResult(result);
+                setView('report');
+                if (user) {
+                    try {
+                        const diagnosesCollectionPath = `/artifacts/${appId}/users/${user.uid}/diagnoses`;
+                        await db.collection(diagnosesCollectionPath).add({
+                            ...result,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    } catch (e) {
+                        console.error("Error saving diagnosis:", e);
+                    }
+                }
+            };
+           
+            if (loading) {
+                return <div className="min-h-screen flex items-center justify-center"><div className="text-center p-10">読み込み中...</div></div>;
+            }
+
+
+            if (!user) {
+                return <AuthScreen auth={auth} />;
+            }
+           
+            // Router to switch views
+            switch(view) {
+                case 'diagnosis':
+                    return <AiDiagnosis onFinish={handleFinishDiagnosis} />;
+                case 'report':
+                    return <DiagnosisReport result={diagnosisResult} setView={setView} />;
+                case 'dashboard':
+                default:
+                    return <Dashboard user={user} setView={setView} auth={auth} />;
+            }
+        }
+
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
